@@ -40,3 +40,8 @@ include/config
 
 # build
 build/
+
+# python
+**.egg-info
+**__pycache__
+**dist

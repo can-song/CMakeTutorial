@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(CUDA_MAT_MUL LANGUAGES CXX CUDA)
+# set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-12.1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(cudaMatMul cudaMatMul.cu cudaMatMul.h)
+add_library(cudaMatMul SHARED cudaMatMul.cu cudaMatMul.h)
 target_compile_features(cudaMatMul PUBLIC cxx_std_11)
 
 add_executable(main main.cc)
