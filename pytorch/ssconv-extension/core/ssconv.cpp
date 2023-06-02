@@ -1,4 +1,8 @@
 #include "ssconv.hpp"
+#include "ssconv.cuh"
+    #     name='ssconv',
+    #     ext_modules=[CppExtension('ssconv', sources, include_dirs=include_dirs)],
+    #     cmdclass={'build_ext': BuildExtension})
 #include <limits>
 #include <iostream>
 
@@ -52,9 +56,6 @@ void ssconv_forward_cpu_kernel(const T* input,
                 for(long oc = 0; oc < out_channels; oc++)
                 {
                     long idx_o = ((bs * out_height + oh)*out_width + ow)*out_channels + oc;
-#ifdef DEBUG
-                    std::cout << "idx_o:" << idx_o << std::endl;
-#endif // DEBUG
                     T max_val = std::numeric_limits<T>::lowest(), val;
                     INDEX_TYPE max_idx = 0, idx;
                     for(long og = 0; og < out_groups; og++)
@@ -171,7 +172,10 @@ void ssconv_forward(Tensor input,
     // dispatch device(cuda or cpu)
     if(is_cuda)
     {
-
+        ssconv_forward_gpu(input, in_index,  weight, bias, output, out_index,
+                           batch_size, in_height, in_width, in_channels, in_groups, 
+                           kernel_h, kernel_w, stride_h, stride_w, 
+                           out_height, out_width, out_channels, out_groups);
     }
     else
     {
@@ -183,13 +187,16 @@ void ssconv_forward(Tensor input,
 }
 
 template <typename T>
-void ssconv_backward_cpu_kernel(const T* grad_output,
+void ssconv_backward_cpu_kernel(const T* output_grad,
                                 const T* input,
                                 const INDEX_TYPE* in_index,
                                 const T* weight,
-                                const T* bias,
-                                T* output,
-                                INDEX_TYPE* out_index,
+                                // const T* bias,
+                                // const T* output,
+                                const INDEX_TYPE* out_index,
+                                T* input_grad,
+                                T* weight_grad,
+                                T* bias_grad,
                                 long batch_size, 
                                 long in_height, 
                                 long in_width,
@@ -204,6 +211,8 @@ void ssconv_backward_cpu_kernel(const T* grad_output,
                                 long out_channels,
                                 long out_groups)
 {
+    long pad_h = kernel_h >> 1;
+    long pad_w = kernel_w >> 1;
 #ifdef DEBUG
     std::cout << "pad_h:       " << pad_h << std::endl
               << "pad_w:       " << pad_w << std::endl
@@ -219,24 +228,69 @@ void ssconv_backward_cpu_kernel(const T* grad_output,
               << "out_width:   " << out_width << std::endl
               << "out_channels:" << out_channels << std::endl;
 #endif // DEBUG
+
+for(long bs = 0; bs < batch_size; bs++)
+    {
+        for(long oh = 0; oh < out_height; oh++)
+        {
+            for(long ow = 0; ow < out_width; ow++)
+            {
+                for(long oc = 0; oc < out_channels; oc++)
+                {
+                    long idx_o                   = ((bs * out_height + oh)*out_width + ow)*out_channels + oc;
+                    long og                      = out_index[idx_o];
+                    bias_grad[oc*out_groups+og] += output_grad[idx_o];
+                    for(long ic=0; ic<in_channels; ic++)
+                    {
+                        for(long kh=0; kh<kernel_h; kh++)
+                        {
+                            long ih = oh*stride_h + (kh - pad_h);
+                            if (ih<0 || ih>=in_height) continue;
+                            for(long kw=0; kw<kernel_w; kw++)
+                            {
+                                long iw = ow*stride_w + (kw - pad_w);
+                                if (iw<0 || iw>=in_width) continue;
+
+                                long idx_i          = ((bs*in_height+ih)*in_width+iw)*in_channels+ic;
+                                long ig             = in_index[idx_i];
+                                long idx_k          = (((((oc*out_groups)+og)*in_channels+ic)*in_groups+ig)*kernel_h+kh)*kernel_w+kw;
+
+                                weight_grad[idx_k] += output_grad[idx_o] * input[idx_i];
+                                input_grad[idx_i]  += output_grad[idx_o] * weight[idx_k];
+                            }
+                        }
+                    }     
+                }
+            }
+        }
+
+    }
+
 }
 
-void ssconv_backward_cpu(Tensor grad_output, Tensor input, Tensor in_index, 
-                         Tensor weight, Tensor bias, Tensor output, Tensor out_index,
-                         long batch_size, long in_height, long in_width, long in_channels, long in_groups,
-                         long kernel_h, long kernel_w, long stride_h, long stride_w, 
-                         long out_height, long out_width, long out_channels, long out_groups)
+std::vector<Tensor>  ssconv_backward_cpu(Tensor output_grad, Tensor input, Tensor in_index, 
+                                         Tensor weight, Tensor bias, Tensor out_index,
+                                         long batch_size, long in_height, long in_width, long in_channels, long in_groups,
+                                         long kernel_h, long kernel_w, long stride_h, long stride_w, 
+                                         long out_height, long out_width, long out_channels, long out_groups)
 {
+    Tensor input_grad  = at::zeros_like(input);
+    Tensor weight_grad = at::zeros_like(weight);
+    Tensor bias_grad   = at::zeros_like(bias);
+
     // dispatch type(float or half)
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "ssconv_forward_cpu", [&]
     {
-        ssconv_backward_cpu_kernel<scalar_t>(grad_output.data_ptr<scalar_t>(),
+        ssconv_backward_cpu_kernel<scalar_t>(output_grad.data_ptr<scalar_t>(),
                                              input.data_ptr<scalar_t>(), 
                                              in_index.data_ptr<INDEX_TYPE>(), 
                                              weight.data_ptr<scalar_t>(),
-                                             bias.data_ptr<scalar_t>(),
-                                             output.data_ptr<scalar_t>(),
+                                            //  bias.data_ptr<scalar_t>(),
+                                            //  output.data_ptr<scalar_t>(),
                                              out_index.data_ptr<INDEX_TYPE>(),
+                                             input_grad.data_ptr<scalar_t>(),
+                                             weight_grad.data_ptr<scalar_t>(),
+                                             bias_grad.data_ptr<scalar_t>(),
                                              batch_size,
                                              in_height,
                                              in_width,
@@ -251,21 +305,22 @@ void ssconv_backward_cpu(Tensor grad_output, Tensor input, Tensor in_index,
                                              out_channels,
                                              out_groups);
     });
+    return {input_grad, weight_grad, bias_grad};
 }
 
-void ssconv_backward(Tensor grap_output, 
-                     Tensor input,
-                     Tensor in_index,
-                     Tensor weight,
-                     Tensor bias,
-                     Tensor output, 
-                     Tensor out_index, 
-                     long in_groups,
-                     long out_groups,
-                     long stride_h,
-                     long stride_w)
+std::vector<Tensor> ssconv_backward(Tensor output_grad, 
+                                    Tensor input,
+                                    Tensor in_index,
+                                    Tensor weight,
+                                    Tensor bias,
+                                    // Tensor output, 
+                                    Tensor out_index, 
+                                    long in_groups,
+                                    long out_groups,
+                                    long stride_h,
+                                    long stride_w)
 {
-    bool is_cuda = false
+    bool is_cuda = false;
     // check device
     // check shape
 
@@ -278,20 +333,20 @@ void ssconv_backward(Tensor grap_output,
     long kernel_h     = weight.size(2);
     long kernel_w     = weight.size(3);
 
-    long out_height   = output.size(1);
-    long out_width    = output.size(2);
+    long out_height   = output_grad.size(1);
+    long out_width    = output_grad.size(2);
 
     // dispatch device(cuda or cpu)
     if(is_cuda)
     {
-
+        return {};
     }
     else
     {
-        ssconv_backward_cpu(grad_output, input, in_index, weight, bias, output, out_index,
-                            batch_size, in_height, in_width, in_channels, in_groups, 
-                            kernel_h, kernel_w, stride_h, stride_w, 
-                            out_height, out_width, out_channels, out_groups)
+        return ssconv_backward_cpu(output_grad, input, in_index, weight, bias, out_index,
+                                   batch_size, in_height, in_width, in_channels, in_groups, 
+                                   kernel_h, kernel_w, stride_h, stride_w, 
+                                   out_height, out_width, out_channels, out_groups);
     }
 
 }
@@ -305,6 +360,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
           py::arg("in_groups"), py::arg("out_groups"), py::arg("stride_h"), py::arg("stride_w"));
     m.def("backward", &ssconv_backward, "sparse to sparse convolution backward",
           py::arg("output_grad"), py::arg("input"), py::arg("in_index"), 
-          py::arg("weight"), py::arg("bias"), py::arg("output"), py::arg("out_index"),
+          py::arg("weight"), py::arg("bias"), py::arg("out_index"),
           py::arg("in_groups"), py::arg("out_groups"), py::arg("stride_h"), py::arg("stride_w"));
 }

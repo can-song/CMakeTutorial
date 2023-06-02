@@ -29,7 +29,6 @@ class SSConv2dFunction(Function):
         ctx.stride_w = stride_w
         ctx.pad_h = stride_h // 2
         ctx.pad_w = stride_w // 2
-        ctx.save_for_backward(input, in_index, weight, bias)
         
         output = input.new_empty(
             SSConv2dFunction._get_output_size(ctx, input, weight))
@@ -38,7 +37,21 @@ class SSConv2dFunction(Function):
             dtype=INDEX_TYPE)
         ssconv.forward(input, in_index, weight, bias, output, out_index, 
                        in_groups, out_groups, stride_h, stride_w)
+
+        ctx.save_for_backward(input, in_index, weight, bias, output, out_index)
         return output, out_index
+    
+    @staticmethod
+    def backward(ctx, 
+                 grad_output: Tensor,
+                 grad_index=None):
+        input, in_index, weight, bias, output, out_index = ctx.saved_variables
+        output_grads = ssconv.backward(grad_output, input, in_index, 
+                                       weight, bias, out_index,
+                                       ctx.in_groups, ctx.out_groups,
+                                       ctx.stride_h, ctx.stride_w)
+        input_grad, weight_grad, bias_grad = output_grads
+        return input_grad, None, weight_grad, bias_grad, None, None, None, None
     
     @staticmethod
     def _get_output_size(ctx, input, weight):
@@ -68,18 +81,15 @@ class SSConv2d(nn.Module):
             torch.Tensor(out_channels, in_channels, *kernel_size, device=device))
         self.bias = Parameter(torch.Tensor(out_channels, device=device))
     
-    def forward(self, data_index_pair):
-        # if isinstance(data_index_pair, torch.Tensor):
-        #     data_index_pair = DSTransform2d()(data_index_pair)
-        input, in_index = data_index_pair
+    def forward(self, inputs):
+        # if isinstance(inputs, torch.Tensor):
+        #     data_index_pair = DSTransform2d()(inputs)
+        input, in_index = inputs
         output = SSConv2dFunction.apply(input, in_index, self.weight, self.bias, 
                                         self.in_groups, self.out_groups, *self.stride)
         # if self.out_groups == 1:
         #     return SDTransform2d()(output)
         return output
-    
-    def backward(self, grad_output):
-        pass
     
         
 class DSTransform2d(nn.Module):

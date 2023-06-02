@@ -34,9 +34,19 @@ def test_two(in_channels=3,
 
     dstrans = DSTransform2d()
     sdtrans = SDTransform2d()
-    x = torch.randn([1, in_channels, in_height, in_width], device=device)
+    x = torch.randn([1, in_channels, in_height, in_width], device=device, requires_grad=True)
+    y = x.clone().detach()
+    y.requires_grad = True
     gt = conv(x)
-    res = sdtrans(ssconv(dstrans(x)))
+    res = sdtrans(ssconv(dstrans(y)))
+    dx = torch.randn_like(gt)
+    dy = dx
+    gt.backward(dx)
+    res.backward(dy)
+
+    assert torch.allclose(x.grad, y.grad, 1e3, 1e5)
+    assert torch.allclose(conv.weight.grad, conv.weight.grad, 1e3, 1e5)
+    assert torch.allclose(conv.bias.grad, conv.bias.grad, 1e3, 1e5)
 
     assert torch.allclose(res, gt, 1e-3, 1e-5)
 

@@ -20,6 +20,6 @@ using namespace at;
 
 #define INDEX_TYPE short
 
-#define DEBUG
+// #define DEBUG
 
 #endif // CORE_SSCONV_HPP
