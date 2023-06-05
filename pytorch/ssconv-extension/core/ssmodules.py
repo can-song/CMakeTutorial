@@ -5,6 +5,11 @@ from torch import Tensor
 from torch.nn.modules.utils import _pair
 from torch.nn.parameter import Parameter
 
+import os
+import os.path as osp
+import sys
+# sys.path.insert(0, osp.join(osp.dirname(__file__), "../build/lib.linux-x86_64-cpython-310"))
+sys.path.insert(0, "/home/songcan/Data/Data2/Project/CMakeTutorial/pytorch/ssconv-extension/build/lib.linux-x86_64-cpython-310")
 import ssconv
 from torch.nn.modules.utils import _pair
 

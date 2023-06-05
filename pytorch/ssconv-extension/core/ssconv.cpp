@@ -1,10 +1,17 @@
 #include "ssconv.hpp"
-#include "ssconv.cuh"
-    #     name='ssconv',
-    #     ext_modules=[CppExtension('ssconv', sources, include_dirs=include_dirs)],
-    #     cmdclass={'build_ext': BuildExtension})
+// #include "ssconv.cuh"
 #include <limits>
 #include <iostream>
+
+void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bias, Tensor output, Tensor out_index,
+                                   long batch_size, long in_height, long in_width, long in_channels, long in_groups,
+                                   long kernel_h, long kernel_w, long stride_h, long stride_w, 
+                                   long out_height, long out_width, long out_channels, long out_groups);
+std::vector<Tensor>  ssconv_backward_gpu(Tensor output_grad, Tensor input, Tensor in_index, 
+                                         Tensor weight, Tensor bias, Tensor out_index,
+                                         long batch_size, long in_height, long in_width, long in_channels, long in_groups,
+                                         long kernel_h, long kernel_w, long stride_h, long stride_w, 
+                                         long out_height, long out_width, long out_channels, long out_groups);
 
 
 template <typename T>
@@ -136,23 +143,24 @@ void ssconv_forward(Tensor input,
                     long stride_w)
 {
     bool is_cuda = false;
-    // if(input.device().is_cuda())
-    // {
-    //     CHECK_CUDA_INPUT(input);
-    //     CHECK_CUDA_INPUT(index);
-    //     CHECK_CUDA_INPUT(weight);
-    //     CHECK_CUDA_INPUT(bias);
-    //     CHECK_CUDA_INPUT(output);
-    //     is_cuda = true;
-    // }
-    // else
-    // {
-    //     CHECK_CPU_INPUT(input);
-    //     CHECK_CPU_INPUT(index);
-    //     CHECK_CPU_INPUT(weight);
-    //     CHECK_CPU_INPUT(bias);
-    //     CHECK_CPU_INPUT(output);
-    // }
+    if(input.device().is_cuda())
+    {
+        CHECK_CUDA_INPUT(input);
+        CHECK_CUDA_INPUT(in_index);
+        CHECK_CUDA_INPUT(weight);
+        CHECK_CUDA_INPUT(bias);
+        CHECK_CUDA_INPUT(output);
+        is_cuda = true;
+    }
+    else
+    {
+        CHECK_CPU_INPUT(input);
+        CHECK_CPU_INPUT(in_index);
+        CHECK_CPU_INPUT(weight);
+        CHECK_CPU_INPUT(bias);
+        CHECK_CPU_INPUT(output);
+        is_cuda = false;
+    }
 
     //TODO: check shape
 
@@ -320,8 +328,26 @@ std::vector<Tensor> ssconv_backward(Tensor output_grad,
                                     long stride_h,
                                     long stride_w)
 {
-    bool is_cuda = false;
     // check device
+    bool is_cuda = false;
+    if(input.device().is_cuda())
+    {
+        CHECK_CUDA_INPUT(input);
+        CHECK_CUDA_INPUT(in_index);
+        CHECK_CUDA_INPUT(weight);
+        CHECK_CUDA_INPUT(bias);
+        CHECK_CUDA_INPUT(output);
+        is_cuda = true;
+    }
+    else
+    {
+        CHECK_CPU_INPUT(input);
+        CHECK_CPU_INPUT(in_index);
+        CHECK_CPU_INPUT(weight);
+        CHECK_CPU_INPUT(bias);
+        CHECK_CPU_INPUT(output);
+        is_cuda = false;
+    }
     // check shape
 
     long batch_size   = input.size(0);
@@ -339,7 +365,10 @@ std::vector<Tensor> ssconv_backward(Tensor output_grad,
     // dispatch device(cuda or cpu)
     if(is_cuda)
     {
-        return {};
+        return ssconv_backward_gpu(output_grad, input, in_index, weight, bias, out_index,
+                                   batch_size, in_height, in_width, in_channels, in_groups, 
+                                   kernel_h, kernel_w, stride_h, stride_w, 
+                                   out_height, out_width, out_channels, out_groups);;
     }
     else
     {

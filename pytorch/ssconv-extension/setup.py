@@ -11,7 +11,8 @@ if __name__ == '__main__':
     include_dirs = [osp.join(script_dir, 'core')]
     src_dir      = osp.join(script_dir, 'core')
     sources      = [osp.join(src_dir, 'ssconv.cpp'),
-                    osp.join(src_dir, 'ssconv.cu')]
+                    # osp.join(src_dir, 'ssconv.cu')
+                    ]
 
     # setup(
     #     name='ssconv',
