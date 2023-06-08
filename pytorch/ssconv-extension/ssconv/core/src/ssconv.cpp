@@ -1,12 +1,12 @@
 #include "ssconv.hpp"
-// #include "ssconv.cuh"
-#include <limits>
-#include <iostream>
+// #include <limits>
+// #include <iostream>
 
 void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bias, Tensor output, Tensor out_index,
                                    long batch_size, long in_height, long in_width, long in_channels, long in_groups,
                                    long kernel_h, long kernel_w, long stride_h, long stride_w, 
                                    long out_height, long out_width, long out_channels, long out_groups);
+
 std::vector<Tensor>  ssconv_backward_gpu(Tensor output_grad, Tensor input, Tensor in_index, 
                                          Tensor weight, Tensor bias, Tensor out_index,
                                          long batch_size, long in_height, long in_width, long in_channels, long in_groups,
@@ -336,7 +336,7 @@ std::vector<Tensor> ssconv_backward(Tensor output_grad,
         CHECK_CUDA_INPUT(in_index);
         CHECK_CUDA_INPUT(weight);
         CHECK_CUDA_INPUT(bias);
-        CHECK_CUDA_INPUT(output);
+        CHECK_CUDA_INPUT(output_grad);
         is_cuda = true;
     }
     else
@@ -345,7 +345,7 @@ std::vector<Tensor> ssconv_backward(Tensor output_grad,
         CHECK_CPU_INPUT(in_index);
         CHECK_CPU_INPUT(weight);
         CHECK_CPU_INPUT(bias);
-        CHECK_CPU_INPUT(output);
+        CHECK_CPU_INPUT(output_grad);
         is_cuda = false;
     }
     // check shape
@@ -368,7 +368,7 @@ std::vector<Tensor> ssconv_backward(Tensor output_grad,
         return ssconv_backward_gpu(output_grad, input, in_index, weight, bias, out_index,
                                    batch_size, in_height, in_width, in_channels, in_groups, 
                                    kernel_h, kernel_w, stride_h, stride_w, 
-                                   out_height, out_width, out_channels, out_groups);;
+                                   out_height, out_width, out_channels, out_groups);
     }
     else
     {

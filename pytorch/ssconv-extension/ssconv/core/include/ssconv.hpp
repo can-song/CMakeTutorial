@@ -3,6 +3,8 @@
 
 #include <torch/extension.h>
 #include <vector>
+#include <iostream>
+#include <limits>
 using namespace at;
 
 #define CHECK_CUDA(x) \
@@ -18,8 +20,5 @@ using namespace at;
   CHECK_CPU(x);            \
   CHECK_CONTIGUOUS(x)
 
-#define INDEX_TYPE short
-
-// #define DEBUG
 
 #endif // CORE_SSCONV_HPP

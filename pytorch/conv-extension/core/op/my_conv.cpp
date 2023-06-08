@@ -275,16 +275,16 @@ void my_conv_im2col_cpu(Tensor data_im,
               height_col, width_col, data_col.data_ptr<scalar_t>()); });
 }
 
-void my_conv_im2col_cuda(Tensor data_im,
-                        const int channels, const int height,
-                        const int width, const int ksize_h,
-                        const int ksize_w, const int pad_h, const int pad_w,
-                        const int stride_h, const int stride_w,
-                        const int dilation_h, const int dilation_w,
-                        const int parallel_imgs, Tensor data_col)
-{
+// void my_conv_im2col_cuda(Tensor data_im,
+//                         const int channels, const int height,
+//                         const int width, const int ksize_h,
+//                         const int ksize_w, const int pad_h, const int pad_w,
+//                         const int stride_h, const int stride_w,
+//                         const int dilation_h, const int dilation_w,
+//                         const int parallel_imgs, Tensor data_col)
+// {
 
-}
+// }
 
 PYBIND11_MODULE(my_ops, m)
 {

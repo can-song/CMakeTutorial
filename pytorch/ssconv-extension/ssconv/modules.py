@@ -1,16 +1,18 @@
 import torch
 from torch.autograd import Function
 import torch.nn as nn
+from torch.nn import init
 from torch import Tensor
 from torch.nn.modules.utils import _pair
 from torch.nn.parameter import Parameter
+import math
 
 import os
 import os.path as osp
 import sys
-# sys.path.insert(0, osp.join(osp.dirname(__file__), "../build/lib.linux-x86_64-cpython-310"))
-sys.path.insert(0, "/home/songcan/Data/Data2/Project/CMakeTutorial/pytorch/ssconv-extension/build/lib.linux-x86_64-cpython-310")
-import ssconv
+import importlib
+
+core = importlib.import_module('ssconv.core')
 from torch.nn.modules.utils import _pair
 
 INDEX_TYPE = torch.short
@@ -40,7 +42,7 @@ class SSConv2dFunction(Function):
         out_index = input.new_empty(
             SSConv2dFunction._get_output_size(ctx, input, weight), 
             dtype=INDEX_TYPE)
-        ssconv.forward(input, in_index, weight, bias, output, out_index, 
+        core.forward(input, in_index, weight, bias, output, out_index, 
                        in_groups, out_groups, stride_h, stride_w)
 
         ctx.save_for_backward(input, in_index, weight, bias, output, out_index)
@@ -51,7 +53,8 @@ class SSConv2dFunction(Function):
                  grad_output: Tensor,
                  grad_index=None):
         input, in_index, weight, bias, output, out_index = ctx.saved_variables
-        output_grads = ssconv.backward(grad_output, input, in_index, 
+        grad_output = grad_output.contiguous()
+        output_grads = core.backward(grad_output, input, in_index, 
                                        weight, bias, out_index,
                                        ctx.in_groups, ctx.out_groups,
                                        ctx.stride_h, ctx.stride_w)
@@ -85,6 +88,19 @@ class SSConv2d(nn.Module):
         self.weight = Parameter(
             torch.Tensor(out_channels, in_channels, *kernel_size, device=device))
         self.bias = Parameter(torch.Tensor(out_channels, device=device))
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
+        # uniform(-1/sqrt(k), 1/sqrt(k)), where k = weight.size(1) * prod(*kernel_size)
+        # For more details see: https://github.com/pytorch/pytorch/issues/15314#issuecomment-477448573
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                init.uniform_(self.bias, -bound, bound)
     
     def forward(self, inputs):
         # if isinstance(inputs, torch.Tensor):
@@ -146,7 +162,7 @@ class SSBatchNorm2d(nn.Module):
         
     def forward(self, data_index_pair):
         data, index = data_index_pair
-        data = input.permute(0, 3, 1, 2).contiguous()
+        data = data.permute(0, 3, 1, 2).contiguous()
         data = self.batch_norm(data)
         data = data.permute(0, 2, 3, 1).contiguous()
         return data, index
