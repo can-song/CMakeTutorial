@@ -22,6 +22,9 @@ if __name__ == '__main__':
     src_dir      = osp.join(script_dir, 'ssconv/core/src')
     sources      = [osp.join(src_dir, 'ssconv.cpp'),
                     osp.join(src_dir, 'ssconv_cuda.cu')]
+    
+    define_macros = define_macros=[("INDEX_TYPE", "short")]
+    define_macros.append(("NDEBUG", None))
 
     # setup(
     #     name='ssconv',
@@ -32,6 +35,6 @@ if __name__ == '__main__':
         version=get_version(),
         packages=find_packages(),
         ext_modules=[CUDAExtension('ssconv.core', sources, include_dirs=include_dirs,
-                                   define_macros=[("INDEX_TYPE", "short")],
+                                   define_macros=define_macros,
                                    undef_macros=[])],
         cmdclass={'build_ext': BuildExtension})

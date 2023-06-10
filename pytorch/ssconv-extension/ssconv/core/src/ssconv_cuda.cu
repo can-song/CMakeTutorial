@@ -14,7 +14,7 @@ __global__ void ssconv_forward_gpu_kernel(const int N,
                                           INDEX_TYPE* out_index,
                                           long batch_size, 
                                           long in_height, 
-                                          long in_width,
+                                          long in_width, 
                                           long in_channels, 
                                           long in_groups,
                                           long kernel_h,
@@ -30,14 +30,14 @@ __global__ void ssconv_forward_gpu_kernel(const int N,
     long pad_w = kernel_w >> 1;
     CUDA_1D_KERNEL_LOOP(index, N)
     {
-        long idx_o    = index;
-        const long oc = idx_o % out_channels;
-        idx_o /= out_channels;
-        const long ow = idx_o % out_width;
-        idx_o /= out_width;
-        const long oh = idx_o % out_height;
-        idx_o /= out_height;
-        const long bs = idx_o;
+        const long idx_o    = index;
+        const long oc = index % out_channels;
+        index /= out_channels;
+        const long ow = index % out_width;
+        index /= out_width;
+        const long oh = index % out_height;
+        index /= out_height;
+        const long bs = index;
 
         scalar_t max_val = std::numeric_limits<scalar_t>::lowest(), val;
         INDEX_TYPE max_idx = 0, idx;
@@ -78,10 +78,16 @@ void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bia
     long kernel_h, long kernel_w, long stride_h, long stride_w, 
     long out_height, long out_width, long out_channels, long out_groups)
 {
+#ifndef NDEBUG
+    fprintf(stdout, "out_groups: %d\n", out_groups);
+#endif
     // dispatch type(float or half)
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "ssconv_forward_gpu", [&]
     {
         int N = batch_size * out_height * out_width * out_channels;
+#ifndef NDEBUG
+        fprintf(stdout, "N: %d\n", N);
+#endif
         ssconv_forward_gpu_kernel<scalar_t><<<GET_BLOCKS(N), THREADS_PER_BLOCK, 0, at::cuda::getCurrentCUDAStream()>>>(
             N,
             input.data_ptr<scalar_t>(), 
@@ -105,10 +111,13 @@ void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bia
             out_groups);
     });
 
-    // cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     // __syncthreads();
     // AT_CUDA_CHECK(cudaGetLastError());
     cudaError_t err = cudaGetLastError();
+#ifndef NDEBUG
+    fprintf(stdout, "forward done!");
+#endif
     if (cudaSuccess != err) {
         fprintf(stderr, "cudaCheckError() failed : %s\n", cudaGetErrorString(err));
         exit(-1);
@@ -141,28 +150,31 @@ __global__ void ssconv_backward_input_gpu_kernel(const int N,
     long pad_w = kernel_w >> 1;
     CUDA_1D_KERNEL_LOOP(index, N)
     {
-        long idx_i    = index;
-        const long ic = idx_i % in_channels;
-        idx_i /= in_channels;
-        const long iw = idx_i % in_width;
-        idx_i /= in_width;
-        const long ih = idx_i % in_height;
-        idx_i /= in_height;
-        const long bs = idx_i;
+        const long idx_i    = index;
+        const long ic = index % in_channels;
+        index /= in_channels;
+        const long iw = index % in_width;
+        index /= in_width;
+        const long ih = index % in_height;
+        index /= in_height;
+        const long bs = index;
         const long ig = in_index[idx_i];
 
-        scalar_t grad = 0
+        scalar_t grad = 0;
         for(long oc=0; oc<out_channels; ++oc)
         {
             for(long kh=0; kh<kernel_h; ++kh)
             {
-                long oh = ih + kh - pad_h;
-                if(oh<0 || oh>=out_height || oh%stride_h) continue;
+                long oh = ih - (kh - pad_h);
+                if(oh%stride_h) continue;
+                oh /= stride_h;
+                if((oh<0) || (oh>=out_height)) continue;
                 for(long kw=0; kw<kernel_w; ++kw)
                 {
-                    long ow = iw + kw - pad_w;
-                    if(ow<0 || ow>=out_width || ow%stride_w) continue;
-
+                    long ow = iw - (kw - pad_w);
+                    if(ow%stride_w) continue;
+                    ow /= stride_w;
+                    if((ow<0) || (ow>=out_width)) continue;
                     long idx_o = ((bs*out_height+oh)*out_width+ow)*out_channels+oc;
                     long og    = out_index[idx_o];
                     long idx_k = (((((oc*out_groups)+og)*in_channels+ic)*in_groups+ig)*kernel_h+kh)*kernel_w+kw;
@@ -201,18 +213,18 @@ __global__ void ssconv_backward_weight_gpu_kernel(const int N,
     long pad_w = kernel_w >> 1;
     CUDA_1D_KERNEL_LOOP(index, N)
     {
-        long idx_k    = index;
-        const long kw = idx_k % kernel_w;
-        idx_k        /= kernel_w;
-        const long kh = idx_k % kernel_h;
-        idx_k        /= kernel_h;
-        const long ig = idx_k % in_groups;
-        idx_k        /= in_groups;
-        const long ic = idx_k % in_channels;
-        idx_k        /= in_channels;
-        const long og = idx_k % out_groups;
-        idx_k        /= out_groups;
-        const long oc = idx_k;
+        const long idx_k    = index;
+        const long kw = index % kernel_w;
+        index        /= kernel_w;
+        const long kh = index % kernel_h;
+        index        /= kernel_h;
+        const long ig = index % in_groups;
+        index        /= in_groups;
+        const long ic = index % in_channels;
+        index        /= in_channels;
+        const long og = index % out_groups;
+        index        /= out_groups;
+        const long oc = index;
 
         scalar_t grad = 0;
         for(long bs=0; bs<batch_size; ++bs)
@@ -263,9 +275,9 @@ __global__ void ssconv_backward_bias_gpu_kernel(const int N,
     CUDA_1D_KERNEL_LOOP(index, N)
     {
         long idx_b    = index;
-        const long og = idx_b % out_groups;
-        idx_b /= out_groups;
-        const long oc = idx_b;
+        const long og = index % out_groups;
+        index /= out_groups;
+        const long oc = index;
 
         scalar_t grad = 0;
         for(long bs=0; bs<batch_size; ++bs)
@@ -275,8 +287,8 @@ __global__ void ssconv_backward_bias_gpu_kernel(const int N,
                 for(long ow=0; ow<out_width; ++ow)
                 {
                     long idx_o = ((bs*out_height+oh)*out_width+ow)*out_channels+oc;
-                    if(og!=out_index[idx_o]) continue;
-                    grad += output_grad[idx_o];
+                    if(og==out_index[idx_o])
+                        grad += output_grad[idx_o];
                 }
             }
         }
@@ -324,7 +336,7 @@ std::vector<Tensor>  ssconv_backward_gpu(Tensor output_grad, Tensor input, Tenso
         );
     });
 
-    // cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     // __syncthreads();
     // AT_CUDA_CHECK(cudaGetLastError());
     cudaError_t err = cudaGetLastError();

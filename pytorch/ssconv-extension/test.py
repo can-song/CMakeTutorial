@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from ssconv import SSConv2d, SDTransform2d, DSTransform2d
+from ssconv.modules import SSConv2dFunction
+from torch.autograd import gradcheck
 
 in_channels = 3
 out_channels = 4
@@ -74,7 +76,25 @@ def test_three(in_channels=3,
     y_gpu = sdtrans(ssconv_gpu(dstrans(x_gpu)))
     
     assert torch.allclose(y_cpu, y_gpu.to('cpu'), 1e-3, 1e-5)
+    
+    gradcheck(SSConv2dFunction.apply, 
+              (*dstrans(x_cpu), ssconv_cpu.weight, ssconv_cpu.bias, 
+                ssconv_cpu.in_groups, ssconv_cpu.out_groups, *ssconv_cpu.stride), 
+              eps=1e-3, atol=1e-3)
+    # ssconv_gpu.weight.requires_grad = False
+    ssconv_gpu.bias.requires_grad = False
+    gradcheck(SSConv2dFunction.apply, 
+              (*dstrans(x_gpu), ssconv_gpu.weight, ssconv_gpu.bias,
+                ssconv_gpu.in_groups, ssconv_gpu.out_groups, *ssconv_gpu.stride),
+              eps=1e-3, atol=1e-3)
 
+    grad_cpu = torch.randn_like(y_cpu)
+    grad_gpu = grad_cpu.clone().detach().to("cuda")
+    y_cpu.backward(grad_cpu)
+    y_gpu.backward(grad_gpu)
+    
+    assert torch.allclose(x_cpu.grad, x_gpu.grad.to('cpu'), 1e-3, 1e-5)
+    
     # assert torch.allclose(x.grad, y.grad, 1e3, 1e5)
     # assert torch.allclose(conv.weight.grad, conv.weight.grad, 1e3, 1e5)
     # assert torch.allclose(conv.bias.grad, conv.bias.grad, 1e3, 1e5)

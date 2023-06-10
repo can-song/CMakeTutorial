@@ -37,10 +37,5 @@ inline int GET_BLOCKS(const int N, const int num_threads = THREADS_PER_BLOCK) {
   return min(optimal_block_num, max_block_num);
 }
 
-// template<typename scalar_t>
-// __global__ void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bias, Tensor output, Tensor out_index,
-//                                    long batch_size, long in_height, long in_width, long in_channels, long in_groups,
-//                                    long kernel_h, long kernel_w, long stride_h, long stride_w, 
-//                                    long out_height, long out_width, long out_channels, long out_groups);
 
 #endif // CORE_SSCONV_CUH
