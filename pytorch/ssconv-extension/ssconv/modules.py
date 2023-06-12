@@ -160,11 +160,13 @@ class SSLayerNorm2d(nn.Module):
 
     def forward(self, data_index_pair) -> torch.Tensor:
         data, index = data_index_pair
-        # shifted_index = index + self.base[..., None, None]
-        u = data.mean(1, keepdim=True)
-        s = (data - u).pow(2).mean(1, keepdim=True)
+        shifted_index = index + self.base[..., None, None]
+        # u = data.mean(1, keepdim=True)
+        # s = (data - u).pow(2).mean(1, keepdim=True)
+        u = data.mean()
+        s = (data - u).pow(2).mean()
         data = (data - u) / torch.sqrt(s + self.eps)
-        # data = self.weight[shifted_index] * data + self.bias[shifted_index]
+        data = self.weight[shifted_index] * data + self.bias[shifted_index]
         return data, index
         
 # class SSLayerNorm2d(nn.Module):
