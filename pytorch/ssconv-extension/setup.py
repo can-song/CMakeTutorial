@@ -23,7 +23,7 @@ if __name__ == '__main__':
     sources      = [osp.join(src_dir, 'ssconv.cpp'),
                     osp.join(src_dir, 'ssconv_cuda.cu')]
     
-    define_macros = define_macros=[("INDEX_TYPE", "short")]
+    define_macros = define_macros=[("INDEX_TYPE", "uint8_t")]
     define_macros.append(("NDEBUG", None))
 
     # setup(
