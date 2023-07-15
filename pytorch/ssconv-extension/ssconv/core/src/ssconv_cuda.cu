@@ -43,7 +43,7 @@ __global__ void ssconv_forward_gpu_kernel(const int N,
 
         scalar_t max_val = std::numeric_limits<scalar_t>::lowest(), val;
         INDEX_TYPE max_idx = 0, idx;
-        for(long og = 0; og < out_groups; ++og)
+        for(INDEX_TYPE og = 0; og < out_groups; ++og)
         {
             val = bias[oc*out_groups+og];
             idx = og;
@@ -58,7 +58,7 @@ __global__ void ssconv_forward_gpu_kernel(const int N,
                         if (iw<0 || iw>=in_width) continue;
 
                         const long idx_i = ((bs*in_channels+ic)*in_height+ih)*in_width+iw;
-                        long ig = in_index[idx_i];
+                        INDEX_TYPE ig = in_index[idx_i];
                         long idx_k = ((((oc*out_groups+og)*in_channels+ic)*in_groups+ig)*kernel_h+kh)*kernel_w+kw;
                         val += input[idx_i] * weight[idx_k];
                     }
@@ -86,7 +86,8 @@ void ssconv_forward_gpu(Tensor input, Tensor in_index, Tensor weight, Tensor bia
     // dispatch type(float or half)
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "ssconv_forward_gpu", [&]
     {
-        int N = batch_size * out_height * out_width * out_channels;
+        // int N = batch_size * out_height * out_width * out_channels;
+        int N = output.numel();
 #ifndef NDEBUG
         fprintf(stdout, "N: %d\n", N);
 #endif

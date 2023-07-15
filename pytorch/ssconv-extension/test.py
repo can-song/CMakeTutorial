@@ -115,6 +115,6 @@ def test_three(in_channels=3,
 if __name__=="__main__":
     # test_one()
     # test_two(3, 4, 11, 11, 3, 2)
-    test_three(3, 4, 3, 2, 11, 11, 3, 2, 1)
+    test_three(3, 32, 3, 32, 32, 32, 3, 2, 1)
     # test_two()
 

@@ -34,7 +34,7 @@ using phalf = at::Half;
 inline int GET_BLOCKS(const int N, const int num_threads = THREADS_PER_BLOCK) {
   int optimal_block_num = (N + num_threads - 1) / num_threads;
   // return optimal_block_num;
-  int max_block_num = 1280;
+  int max_block_num = 8192 * 64;
   // int max_block_num = 4096;
   return min(optimal_block_num, max_block_num);
 }

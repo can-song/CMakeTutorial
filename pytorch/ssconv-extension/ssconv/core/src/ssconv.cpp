@@ -166,6 +166,12 @@ void ssconv_forward(Tensor input,
     long out_height   = output.size(2);
     long out_width    = output.size(3);
 
+#ifndef NDEBUG
+    std::cout << "out_block_size: " << out_block_size << std::endl
+              << "in_block_size: " << in_block_size << std::endl;
+#endif // !NDEBUG
+
+
 
     // dispatch device(cuda or cpu)
     if(is_cuda)

@@ -146,28 +146,70 @@ class SDTransform2d(nn.Module):
 #         data = self.weight[index] * data + self.bias[index]
 #         return data, index
     
-class SSLayerNorm2d(nn.Module):
-    def __init__(self, num_channels: int, num_blocks:int, eps: float = 1e-6) -> None:
-        super().__init__()
-        assert num_channels % num_blocks == 0
-        self.weight = nn.Parameter(torch.ones(num_channels))
-        self.bias = nn.Parameter(torch.zeros(num_channels))
-        self.eps = eps
-        self.num_blocks = num_blocks
-        # self.base = torch.range(num_blocks, dtype=torch.int32) * num_channels / num_blocks
+# class SSLayerNorm2d(nn.Module):
+#     def __init__(self, num_channels: int, num_blocks:int, eps: float = 1e-6) -> None:
+#         super().__init__()
+#         assert num_channels % num_blocks == 0
+#         self.weight = nn.Parameter(torch.ones(num_channels))
+#         self.bias = nn.Parameter(torch.zeros(num_channels))
+#         self.eps = eps
+#         self.num_blocks = num_blocks
+#         # self.base = torch.range(num_blocks, dtype=torch.int32) * num_channels / num_blocks
         
-        self.register_buffer('base', torch.arange(num_blocks, dtype=torch.int32) * num_channels // num_blocks)
+#         self.register_buffer('base', torch.arange(num_blocks, dtype=torch.int32) * num_channels // num_blocks)
 
-    def forward(self, data_index_pair) -> torch.Tensor:
+#     def forward(self, data_index_pair) -> torch.Tensor:
+#         data, index = data_index_pair
+#         shifted_index = index + self.base[..., None, None]
+#         # u = data.mean(1, keepdim=True)
+#         # s = (data - u).pow(2).mean(1, keepdim=True)
+#         u = data.mean()
+#         s = (data - u).pow(2).mean()
+#         data = (data - u) / torch.sqrt(s + self.eps)
+#         data = self.weight[shifted_index] * data + self.bias[shifted_index]
+#         return data, index
+
+class SSLayerNorm2d(nn.BatchNorm2d):
+    def __init__(self, num_features: int, num_blocks:int, eps: float = 0.00001, momentum: float = 0.1, affine: bool = True, 
+                 track_running_stats: bool = True, device=None, dtype=None) -> None:
+        super().__init__(num_features, eps, momentum, affine, track_running_stats, device, dtype)
+        self.register_buffer('base', torch.arange(num_blocks, dtype=torch.int32) * num_features // num_blocks)
+        self.running_mean =  self.running_mean[:1]
+        self.running_var = self.running_var[:1]
+
+    def forward(self, data_index_pair):
         data, index = data_index_pair
         shifted_index = index + self.base[..., None, None]
-        # u = data.mean(1, keepdim=True)
-        # s = (data - u).pow(2).mean(1, keepdim=True)
-        u = data.mean()
-        s = (data - u).pow(2).mean()
-        data = (data - u) / torch.sqrt(s + self.eps)
-        data = self.weight[shifted_index] * data + self.bias[shifted_index]
+
+        exponential_average_factor = 0.0
+        if self.training and self.track_running_stats:
+            if self.num_batches_tracked is not None:
+                self.num_batches_tracked += 1
+                if self.momentum is None:
+                    exponential_average_factor = 1.0 / float(self.num_batches_tracked)
+                else:
+                    exponential_average_factor = self.momentum
+
+        if self.training:
+            mean = data.mean()
+            var = data.var()
+            with torch.no_grad():
+                self.running_mean = exponential_average_factor * mean \
+                                    + (1 - exponential_average_factor) * self.running_mean
+                self.running_var = exponential_average_factor * var \
+                                   + (1 - exponential_average_factor) * self.running_var
+        else:
+            mean = self.running_mean
+            var = self.running_var
+        
+        data = (data - mean) / (torch.sqrt(var) + self.eps)
+        if self.affine:
+            data = data * self.weight[shifted_index] + self.bias[shifted_index]
         return data, index
+
+
+
+
         
 # class SSLayerNorm2d(nn.Module):
 #     def __init__(self,
@@ -209,7 +251,8 @@ class SSLayerNorm2d(nn.Module):
 class SSReLU(nn.Module):
     def __init__(self, inplace=False) -> None:
         super().__init__()
-        self.relu = nn.ReLU(inplace)
+        # self.relu = nn.ReLU(inplace)
+        self.relu = nn.LeakyReLU(0.2, inplace=True)
         
         
     def forward(self, data_index_pair):
