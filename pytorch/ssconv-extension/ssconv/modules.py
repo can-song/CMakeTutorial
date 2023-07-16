@@ -259,3 +259,45 @@ class SSReLU(nn.Module):
         data, index = data_index_pair
         data = self.relu(data)
         return data, index
+    
+class SSDropout(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.dropout = nn.Dropout()
+    
+    def forward(self, data_index_pair):
+        data, index = data_index_pair
+        data = self.dropout(data)
+        return data, index
+
+class SSBatchNorm2d(nn.Module):
+    def __init__(self, num_features: int, num_blocks:int, eps: float = 0.00001, momentum: float = 0.1, affine: bool = True, 
+                 track_running_stats: bool = True, device=None, dtype=None) -> None:
+        super().__init__()
+        self.batch_norm = nn.BatchNorm2d(num_blocks, eps, momentum, False, track_running_stats, device, dtype)
+        if affine:
+            self.affine = True
+            self.weight = nn.Parameter(torch.ones(num_features))
+            self.bias = nn.Parameter(torch.zeros(num_features))
+            self.register_buffer('base', torch.arange(num_blocks, dtype=torch.int32) * num_features // num_blocks)
+    
+    def forward(self, data_index_pair):
+        data, index = data_index_pair
+        data = self.batch_norm(data)
+        if self.affine:
+            shifted_index = index + self.base[..., None, None]
+            data = data * self.weight[shifted_index] + self.bias[shifted_index]
+        return data, index
+    
+
+class SSMaxPool2d(nn.Module):
+    def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False) -> None:
+        super().__init__()
+        return_indices = True
+        self.max_pool = nn.MaxPool2d(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
+        
+    def forward(self, data_index_pair):
+        data, index = data_index_pair
+        data, indices = self.max_pool(data)
+        index = torch.gather(index.flatten(2), -1, indices.flatten(2)).view_as(data)
+        return data, index
